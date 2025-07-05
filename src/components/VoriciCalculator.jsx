@@ -1,0 +1,393 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Calculator, Zap, Target, TrendingUp, Settings, AlertTriangle } from 'lucide-react';
+import VoriciCalculator from '../lib/voriciCalculations';
+import SocketVisualizer from './SocketVisualizer';
+import ResultsTable from './ResultsTable';
+
+const VoriciCalculatorComponent = () => {
+  // Calculator state
+  const [sockets, setSockets] = useState(6);
+  const [strength, setStrength] = useState(100);
+  const [dexterity, setDexterity] = useState(0);
+  const [intelligence, setIntelligence] = useState(0);
+  const [desiredRed, setDesiredRed] = useState(3);
+  const [desiredGreen, setDesiredGreen] = useState(2);
+  const [desiredBlue, setDesiredBlue] = useState(1);
+  const [results, setResults] = useState([]);
+  const [recommendation, setRecommendation] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [lastCalculation, setLastCalculation] = useState(null);
+
+  // Initialize calculator
+  const calculator = useMemo(() => new VoriciCalculator(), []);
+
+  // Validation
+  const validation = useMemo(() => {
+    const totalDesired = desiredRed + desiredGreen + desiredBlue;
+    const errors = [];
+    
+    if (sockets < 1 || sockets > 6) {
+      errors.push('Socket count must be between 1 and 6');
+    }
+    if (totalDesired !== sockets) {
+      errors.push(`Total desired colors (${totalDesired}) must equal socket count (${sockets})`);
+    }
+    if (strength < 0 || dexterity < 0 || intelligence < 0) {
+      errors.push('Attribute values cannot be negative');
+    }
+    if (desiredRed < 0 || desiredGreen < 0 || desiredBlue < 0) {
+      errors.push('Desired socket counts cannot be negative');
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors
+    };
+  }, [sockets, desiredRed, desiredGreen, desiredBlue, strength, dexterity, intelligence]);
+
+  // Calculate results with loading animation
+  const performCalculation = async () => {
+    if (!validation.isValid) return;
+    
+    setIsCalculating(true);
+    
+    // Add a small delay for better UX
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    try {
+      const desiredColors = {
+        red: desiredRed,
+        green: desiredGreen,
+        blue: desiredBlue
+      };
+      
+      const calculationResults = calculator.calculateAllMethods(
+        sockets, strength, dexterity, intelligence, desiredColors
+      );
+      
+      setResults(calculationResults);
+      setRecommendation(calculator.getRecommendation(calculationResults));
+      setLastCalculation(new Date());
+    } catch (error) {
+      console.error('Calculation error:', error);
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  // Auto-calculate when inputs change
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (validation.isValid) {
+        performCalculation();
+      }
+    }, 300); // Debounce calculations
+
+    return () => clearTimeout(timeoutId);
+  }, [sockets, strength, dexterity, intelligence, desiredRed, desiredGreen, desiredBlue, validation.isValid]);
+
+  // Quick preset configurations
+  const presets = [
+    { name: '3R3G', red: 3, green: 3, blue: 0, sockets: 6 },
+    { name: '4R2G', red: 4, green: 2, blue: 0, sockets: 6 },
+    { name: '2R2G2B', red: 2, green: 2, blue: 2, sockets: 6 },
+    { name: '3R1G1B', red: 3, green: 1, blue: 1, sockets: 5 },
+    { name: '2R2G', red: 2, green: 2, blue: 0, sockets: 4 },
+  ];
+
+  const applyPreset = (preset) => {
+    setSockets(preset.sockets);
+    setDesiredRed(preset.red);
+    setDesiredGreen(preset.green);
+    setDesiredBlue(preset.blue);
+  };
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6 p-6">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          Vorici Calculator
+        </h1>
+        <p className="text-lg text-muted-foreground">
+          Calculate chromatic orb costs and success rates for Path of Exile socket coloring. 
+          Find the most cost-effective crafting method for your items.
+        </p>
+      </div>
+
+      {/* Main Calculator */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Input Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Item Configuration
+            </CardTitle>
+            <CardDescription>
+              Enter your item's socket count and attribute requirements
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Socket Count */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Number of Sockets</Label>
+              <div className="flex gap-2">
+                {[1, 2, 3, 4, 5, 6].map((num) => (
+                  <Button
+                    key={num}
+                    variant={sockets === num ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSockets(num)}
+                    className="w-12 h-12 text-lg font-bold"
+                  >
+                    {num}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Attributes */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="strength" className="text-red-600 font-semibold">
+                  🔴 Strength
+                </Label>
+                <Input
+                  id="strength"
+                  type="number"
+                  value={strength}
+                  onChange={(e) => setStrength(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="text-center"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dexterity" className="text-green-600 font-semibold">
+                  🟢 Dexterity
+                </Label>
+                <Input
+                  id="dexterity"
+                  type="number"
+                  value={dexterity}
+                  onChange={(e) => setDexterity(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="text-center"
+                  min="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="intelligence" className="text-blue-600 font-semibold">
+                  🔵 Intelligence
+                </Label>
+                <Input
+                  id="intelligence"
+                  type="number"
+                  value={intelligence}
+                  onChange={(e) => setIntelligence(Math.max(0, parseInt(e.target.value) || 0))}
+                  className="text-center"
+                  min="0"
+                />
+              </div>
+            </div>
+
+            {/* Desired Colors */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Desired Socket Colors</Label>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="red" className="text-red-600 font-semibold">
+                    🔴 Red
+                  </Label>
+                  <Input
+                    id="red"
+                    type="number"
+                    value={desiredRed}
+                    onChange={(e) => setDesiredRed(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="text-center"
+                    min="0"
+                    max={sockets}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="green" className="text-green-600 font-semibold">
+                    🟢 Green
+                  </Label>
+                  <Input
+                    id="green"
+                    type="number"
+                    value={desiredGreen}
+                    onChange={(e) => setDesiredGreen(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="text-center"
+                    min="0"
+                    max={sockets}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="blue" className="text-blue-600 font-semibold">
+                    🔵 Blue
+                  </Label>
+                  <Input
+                    id="blue"
+                    type="number"
+                    value={desiredBlue}
+                    onChange={(e) => setDesiredBlue(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="text-center"
+                    min="0"
+                    max={sockets}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Quick Presets</Label>
+              <div className="flex flex-wrap gap-2">
+                {presets.map((preset) => (
+                  <Button
+                    key={preset.name}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => applyPreset(preset)}
+                    className="font-mono"
+                  >
+                    {preset.name}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {/* Validation Errors */}
+            {!validation.isValid && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  <ul className="list-disc list-inside space-y-1">
+                    {validation.errors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Calculation Status */}
+            {isCalculating && (
+              <div className="flex justify-center py-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                    <div className="w-3 h-3 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
+                  </div>
+                  <span className="text-muted-foreground">Calculating optimal methods...</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Socket Visualizer */}
+        <SocketVisualizer
+          sockets={sockets}
+          desiredColors={{ red: desiredRed, green: desiredGreen, blue: desiredBlue }}
+        />
+      </div>
+
+      {/* Results Section */}
+      {validation.isValid && results.length > 0 && (
+        <>
+          {/* Recommendation */}
+          {recommendation && (
+            <Card className="border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                  <TrendingUp className="h-5 w-5" />
+                  Recommended Method
+                </CardTitle>
+                <CardDescription className="text-green-600 dark:text-green-400">
+                  Most cost-effective approach for your configuration
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-green-800 dark:text-green-200">
+                      {recommendation.method}
+                    </h3>
+                    <p className="text-green-600 dark:text-green-400">
+                      {recommendation.description}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold text-green-800 dark:text-green-200 flex items-center gap-1">
+                      {recommendation.cost.toFixed(1)} <Zap className="h-5 w-5" />
+                    </div>
+                    <div className="text-green-600 dark:text-green-400">
+                      {(recommendation.successRate * 100).toFixed(2)}% chance
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Results Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Calculation Results
+              </CardTitle>
+              <CardDescription>
+                Compare all available crafting methods
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ResultsTable results={results} />
+              
+              {/* Results Explanation */}
+              <div className="mt-6 p-4 bg-muted/30 rounded-lg">
+                <h4 className="font-semibold mb-2">Understanding the Results</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-muted-foreground">
+                  <div>
+                    <strong>Cost (⚡):</strong> Average chromatic orbs needed
+                  </div>
+                  <div>
+                    <strong>Success Rate:</strong> Probability of getting desired colors
+                  </div>
+                  <div>
+                    <strong>Avg. Attempts:</strong> Expected number of crafting attempts
+                  </div>
+                  <div>
+                    <strong>Std. Deviation:</strong> Variability in attempt count
+                  </div>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  <strong>Tip:</strong> Methods with lower cost are more economical. 
+                  Vorici recipes provide guaranteed results but may cost more upfront.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {/* Last Calculation Timestamp */}
+      {lastCalculation && (
+        <div className="text-center text-sm text-muted-foreground">
+          Last calculated: {lastCalculation.toLocaleTimeString()}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default VoriciCalculatorComponent;
+
